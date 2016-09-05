@@ -8,6 +8,8 @@ import (
 )
 
 // URL represents state for a parsed URL
+// URL = scheme://opaque?query#fragment
+// opaque = userinfo@host:port/path
 type URL struct {
 	Input string
 
@@ -97,6 +99,72 @@ func Parse(url string) *URL {
 	return result
 }
 
+func formatAuthorityFromUrl(u *URL) string {
+	result := u.HostAndPort()
+
+	if u.UserInfo != "" {
+		result = fmt.Sprintf("%s@%s", u.UserInfo, result)
+	}
+
+	return result
+}
+
+func formatOpaqueFromUrl(u *URL) string {
+	result := u.Authority
+	if u.Path != "" {
+		result = fmt.Sprintf("%s/%s", result, u.Path)
+	}
+	return result
+}
+
+func ParseWithDefaults(input string, defaults *URL) *URL {
+	u := Parse(input)
+
+	if u.Host == "" {
+		u.Host = defaults.Host
+	}
+
+	if u.Port == "" {
+		u.Port = defaults.Port
+	}
+
+	if u.Path == "" {
+		u.Path = defaults.Path
+	}
+
+	if u.Scheme == "" {
+		if defaults.Scheme == "auto" {
+			if u.Port == "80" {
+				u.Scheme = "http"
+			}
+
+			if u.Port == "443" {
+				u.Scheme = "https"
+			}
+		} else {
+			u.Scheme = defaults.Scheme
+		}
+	}
+
+	if u.Fragment == "" {
+		u.Fragment = defaults.Fragment
+	}
+
+	if u.Query == "" {
+		u.Query = defaults.Query
+	}
+
+	if u.UserInfo == "" {
+		u.UserInfo = defaults.UserInfo
+	}
+
+	// Backfill to present some semblance of consistency
+	u.Authority = formatAuthorityFromUrl(u)
+	u.Opaque = formatOpaqueFromUrl(u)
+
+	return u
+}
+
 // ToNetURL converts an earl.URL in to a net/url.URL
 func (u *URL) ToNetURL() *url.URL {
 	// FIXME users of net/url may expect most of these to be decoded
@@ -124,6 +192,14 @@ func (u *URL) ToNetURL() *url.URL {
 	}
 
 	return ret
+}
+
+func (u *URL) HostAndPort() string {
+	if u.Port != "" {
+		return fmt.Sprintf("%s:%s", u.Host, u.Port)
+	}
+
+	return u.Host
 }
 
 // Normalize is intended to produce an expanded and valid URL representation
